@@ -19,4 +19,4 @@ curl \
 
 to send a basic POST request to the server.
 
-[graph](grpah.jpeg)
+![graph](grpah.jpeg)
