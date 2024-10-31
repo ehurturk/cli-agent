@@ -17,6 +17,10 @@ curl \
   -X POST 'http://127.0.0.1:8000/agent'
 ```
 
+## Security
+
+To avoid agent executing anything dangerous, execute the agent in a restricted access environment, such as Docker.
+
 to send a basic POST request to the server.
 
 ![graph](grpah.jpeg)
