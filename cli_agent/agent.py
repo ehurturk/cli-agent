@@ -212,10 +212,10 @@ app = workflow.compile()
 
 
 def execute(query):
-    question = "in tel.txt, answer the question: how to teleport?"
+    # question = "in tel.txt, answer the question: how to teleport?"
     solution = app.invoke({
-        "messages": [{"role": "user", "content": question}],
-        "query": question,
+        "messages": [{"role": "user", "content": query}],
+        "query": query,
         "iterations": 0,
         "error_log": [],
         "execution_status": "success"
