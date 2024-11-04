@@ -36,8 +36,7 @@ async def test_remove_file():
     res = await execute(query)
 
     # Verify if the file was deleted
-    assert not os.path.exists(
-        file_path), "File 'testfile.txt' was not deleted."
+    assert not os.path.exists(file_path), "File 'testfile.txt' was not deleted."
 
 
 @pytest.mark.asyncio
@@ -57,6 +56,8 @@ async def test_move_file():
     # Verify if the file was moved to the backup directory
     moved_file_path = os.path.join(backup_dir, "testfile.txt")
     assert os.path.exists(
-        moved_file_path), "File 'testfile.txt' was not moved to 'backup' directory."
+        moved_file_path
+    ), "File 'testfile.txt' was not moved to 'backup' directory."
     assert not os.path.exists(
-        file_path), "Original file 'testfile.txt' still exists in the source directory."
+        file_path
+    ), "Original file 'testfile.txt' still exists in the source directory."

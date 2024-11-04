@@ -1,7 +1,6 @@
+import subprocess
 from typing import TypedDict, List
 from dotenv import load_dotenv
-import asyncio
-import subprocess
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -15,8 +14,11 @@ load_dotenv()
 llm = ChatOpenAI(model="gpt-4o")
 
 # Prompt for command line task executions
-prompt = ChatPromptTemplate.from_messages([
-    ("system", """
+prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """
 Given a description of a problem, you will generate only the command line code needed to implement a solution. Follow these guidelines to ensure the output is flawless:
 
 Instructions:
@@ -54,11 +56,16 @@ The code should be clear, accurate, and handle edge cases.
 Do not include markdown or additional formatting, just the command line code.
 
     
-Your task: Now, given the problem: \n-----\n {problem} \n ----- \n Write the command line code solution."""),
-    ("placeholder", "{messages}")])
+Your task: Now, given the problem: \n-----\n {problem} \n ----- \n Write the command line code solution.""",
+        ),
+        ("placeholder", "{messages}"),
+    ]
+)
 
 
 class AgentState(TypedDict):
+    """Represents the state of the Agent's operation during task execution."""
+
     messages: List[dict]  # Update to a list of dictionaries for messages
     query: str  # the query of the user
     execution_status: str  # "success" or "fail"
@@ -70,13 +77,13 @@ class AgentState(TypedDict):
 # Max tries
 MAX_ITERATIONS = 5
 # Reflect
-flag = 'reflect'
+FLAG = "reflect"
 # flag = "do not reflect"
 
 
 def convert_code_block_to_plain_text(code_block):
-    # Remove the triple backticks and strip any extra whitespace
-    return code_block.strip("```").strip()[len("bash\n"):]
+    """Converts markdown code block to plain text by removing backticks."""
+    return code_block.strip("```").strip()[len("bash\n") :]
 
 
 agent_chain = prompt | llm
@@ -99,16 +106,19 @@ async def create_solution(state: AgentState):
     query = state["query"]
 
     if error == "fail":
-        messages.append({
-            "role": "user",
-            "content": "The previous command did not work as expected. Analyze the error and try generating a revised command that addresses any issues. Ensure the command uses standard command-line syntax, handles edge cases, and meets all specified requirements. Provide only the corrected command."
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": """The previous command did not work as expected.
+            Analyze the error and try generating a revised command that addresses
+            any issues. Ensure the command uses standard command-line syntax,
+            handles edge cases, and meets all specified requirements.
+            Provide only the corrected command.""",
+            }
+        )
 
     # Get generated code from LLM
-    code_solution = agent_chain.invoke({
-        "problem": query,
-        "messages": messages
-    }).content
+    code_solution = agent_chain.invoke({"problem": query, "messages": messages}).content
 
     # Format the generated code if it includes markdown backticks
     if "```" in code_solution:
@@ -165,15 +175,16 @@ async def reflect(state: AgentState):
     messages = state["messages"]
 
     # Prompt reflection and add reflection to messages
-    reflections = agent_chain.invoke({
-        "problem": state["query"],
-        "messages": messages
-    }).content
+    reflections = agent_chain.invoke(
+        {"problem": state["query"], "messages": messages}
+    ).content
 
-    messages.append({
-        "role": "assistant",
-        "content": f"Here are reflections on the error: {reflections}"
-    })
+    messages.append(
+        {
+            "role": "assistant",
+            "content": f"Here are reflections on the error: {reflections}",
+        }
+    )
 
     state["messages"] = messages
     return state
@@ -198,12 +209,10 @@ def decide_to_finish(state: AgentState):
     if error == "success" or iterations == MAX_ITERATIONS:
         print("---DECISION: FINISH---")
         return "end"
-    else:
-        print("---DECISION: RE-TRY SOLUTION---")
-        if flag == "reflect":
-            return "reflect"
-        else:
-            return "recreate"
+    print("---DECISION: RE-TRY SOLUTION---")
+    if FLAG == "reflect":
+        return "reflect"
+    return "recreate"
 
 
 workflow = StateGraph(AgentState)
@@ -216,24 +225,36 @@ workflow.add_node("reflect", reflect)
 # Edges
 workflow.set_entry_point("create_solution")
 workflow.add_edge("create_solution", "execute_solution")
-workflow.add_conditional_edges("execute_solution", decide_to_finish,
-                               {
-                                   "end": END,
-                                   "reflect": "reflect",
-                                   "recreate": "create_solution",
-                               }
-                               )
+workflow.add_conditional_edges(
+    "execute_solution",
+    decide_to_finish,
+    {
+        "end": END,
+        "reflect": "reflect",
+        "recreate": "create_solution",
+    },
+)
 
 workflow.add_edge("reflect", "create_solution")
 app = workflow.compile()
 
 
 async def execute(query):
-    solution = await app.ainvoke({
-        "messages": [{"role": "user", "content": query}],
-        "query": query,
-        "iterations": 0,
-        "error_log": [],
-        "execution_status": "success",
-    })
+    """Executes the workflow for a given query.
+
+    Args:
+        query (str): The user query for command execution.
+
+    Returns:
+        AgentState: The final state after execution.
+    """
+    solution = await app.ainvoke(
+        {
+            "messages": [{"role": "user", "content": query}],
+            "query": query,
+            "iterations": 0,
+            "error_log": [],
+            "execution_status": "success",
+        }
+    )
     return solution

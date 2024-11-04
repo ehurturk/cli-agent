@@ -18,6 +18,7 @@ curl \
   -d '{"msg": "create a file named random.txt in the working directory, its content should be a paragraph on LLMs."}' \
   -X POST 'http://127.0.0.1:8000/agent'
 ```
+to send a request to the API.
 
 ## Tests
 
