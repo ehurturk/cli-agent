@@ -1,28 +1,28 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request, jsonify
 import asyncio
-from agent import execute
+
+import agent
 
 app = Flask(__name__)
 
 
-async def handle_message(message):
-    res = execute(message)
-    return res
+async def execute(msg: str) -> str:
+    app_state = await agent.execute(msg)
+    return f"Agent status: {app_state}"
 
 
 @app.route('/agent', methods=['POST'])
-async def agent():
-    # Get the request JSON
+def agent_endpoint():
     data = request.get_json()
+    if not data or 'msg' not in data:
+        return (jsonify({"error": "Missing 'msg' field"}), 400)
 
-    if 'msg' not in data:
-        return (jsonify({"error": "No 'msg' field provided"}), 400)
+    msg = data['msg']
 
-    message = data['msg']
+    response_msg = asyncio.run(execute(msg))
+    return jsonify({"msg": response_msg})
 
-    response_message = await handle_message(message)
 
-    return jsonify({'msg': response_message})
-
+# Run the api on 0.0.0.0:8000
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000)
+    app.run(host="0.0.0.0", port=8000)

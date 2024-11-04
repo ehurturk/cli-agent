@@ -1,5 +1,6 @@
 from typing import TypedDict, List
 from dotenv import load_dotenv
+import asyncio
 import subprocess
 
 from langchain_openai import ChatOpenAI
@@ -7,10 +8,13 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from langgraph.graph import StateGraph, END
 
+# To load the .env files
 load_dotenv()
 
+# Use the GPT-4o model
 llm = ChatOpenAI(model="gpt-4o")
 
+# Prompt for command line task executions
 prompt = ChatPromptTemplate.from_messages([
     ("system", """
 Given a description of a problem, you will generate only the command line code needed to implement a solution. Follow these guidelines to ensure the output is flawless:
@@ -44,6 +48,7 @@ IMPORTANT: You are a command line tool agent, and you are not permitted to execu
 
 Write only code.
 Use standard default command line commands aimed for File I/O.
+IMPORTANT: Do not execute any commands that block the flow of the system, like nano, vim, etc.
 USE FILE I/O COMMANDS!
 The code should be clear, accurate, and handle edge cases.
 Do not include markdown or additional formatting, just the command line code.
@@ -55,15 +60,15 @@ Your task: Now, given the problem: \n-----\n {problem} \n ----- \n Write the com
 
 class AgentState(TypedDict):
     messages: List[dict]  # Update to a list of dictionaries for messages
-    query: str
+    query: str  # the query of the user
     execution_status: str  # "success" or "fail"
-    generated_code: str  # Change to `str` for storing code as a single string
+    generated_code: str  # generated output
     error_log: List[str]  # error log
     iterations: int  # retry count of checks. if it exceeds 5, human intervention will be provided
 
 
 # Max tries
-max_iterations = 5
+MAX_ITERATIONS = 5
 # Reflect
 flag = 'reflect'
 # flag = "do not reflect"
@@ -79,7 +84,15 @@ agent_chain = prompt | llm
 # Nodes
 
 
-def create_solution(state: AgentState):
+async def create_solution(state: AgentState):
+    """Agent node that generates the code solution to the user query.
+
+    Args:
+        state (AgentState): Agent state provided by LangGraph
+
+    Returns:
+        state (AgentState): Modified Agent state
+    """
     messages = state["messages"]
     iterations = state["iterations"]
     error = state["execution_status"]
@@ -101,8 +114,6 @@ def create_solution(state: AgentState):
     if "```" in code_solution:
         code_solution = convert_code_block_to_plain_text(code_solution)
 
-    print(code_solution)
-
     # Append the assistant's response in the correct format
     messages.append({"role": "assistant", "content": code_solution})
     state["messages"] = messages
@@ -112,17 +123,22 @@ def create_solution(state: AgentState):
     return state
 
 
-def execute_solution(state: AgentState):
-    """This function executes the solution provided"""
+async def execute_solution(state: AgentState):
+    """Agent node that executes the generated code.
+
+    Args:
+        state (AgentState): The AgenState that LangGraph provides.
+
+    Returns:
+        AgentState: modified Agent state.
+    """
     messages = state["messages"]
     code_solution = state["generated_code"]
 
     try:
         subprocess.run(code_solution, check=True, shell=True)
     except Exception as e:
-        print("-----EXECUTING CODE: FAILED-----")
         err_msg = f"Your solution has failed the code execution test: {e}"
-        print(err_msg)
 
         # Append the error message in the correct format
         messages.append({"role": "user", "content": err_msg})
@@ -131,12 +147,11 @@ def execute_solution(state: AgentState):
         state["execution_status"] = "fail"
         return state
 
-    print("---NO CODE TEST FAILURES---")
     state["execution_status"] = "success"
     return state
 
 
-def reflect(state: AgentState):
+async def reflect(state: AgentState):
     """
     Reflect on errors
 
@@ -146,8 +161,6 @@ def reflect(state: AgentState):
     Returns:
         AgentState: Updated state with reflection added to messages
     """
-    print("---GENERATING CODE SOLUTION---")
-
     # State
     messages = state["messages"]
 
@@ -182,7 +195,7 @@ def decide_to_finish(state: AgentState):
     error = state["execution_status"]
     iterations = state["iterations"]
 
-    if error == "success" or iterations == max_iterations:
+    if error == "success" or iterations == MAX_ITERATIONS:
         print("---DECISION: FINISH---")
         return "end"
     else:
@@ -215,13 +228,12 @@ workflow.add_edge("reflect", "create_solution")
 app = workflow.compile()
 
 
-def execute(query):
-    # question = "in tel.txt, answer the question: how to teleport?"
-    solution = app.invoke({
+async def execute(query):
+    solution = await app.ainvoke({
         "messages": [{"role": "user", "content": query}],
         "query": query,
         "iterations": 0,
         "error_log": [],
-        "execution_status": "success"
+        "execution_status": "success",
     })
     return solution
