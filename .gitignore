@@ -1,1 +1,4 @@
 .env
+.pytest_cache
+cli_agent/__pycache__
+tests/__pycache__
